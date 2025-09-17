@@ -7,10 +7,15 @@ const adminRoutes = require("./Admin/adminRoutes");
 const app =express();
 
 app.use(express.json());
-app.use(cors({ 
-  origin: 'http://localhost:3001',
+app.use(cors({
+  origin: [
+    "http://localhost:3000",         // React local dev
+    "http://localhost:3001",         // in case you run on 3001 sometimes
+    "https://your-frontend.onrender.com" // Render frontend deployment
+  ],
   credentials: true
- }));
+}));
+
 app.use(express.urlencoded({ extended: true })); 
 // Request logger
 app.use((req, res, next) => {
