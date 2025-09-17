@@ -124,36 +124,57 @@ exports.forgotPassword=async (req,res)=>{
     res.status(500).json({ message: "Internal Server Error", error: err.message });
     }
 }
-exports.updatePassword=async (req,res)=>{
-    try{
-        const { email, otp, newPassword } = req.body;
-        if(!email || !otp || !newPassword){
-            return res.status(400).json({message:"Email,otp and newPassword is Required"})
-        }
-        const admin=await Admin.findOne({email})
-        if(!admin){
-            return res.status(404).json({message:"Admin is Not found"})
-        }
-        const hashedOtp=crypto.createHash("sha256").update(otp).digest("hex");
-        if(
-           admin.resetPasswordOtp !== hashedOtp ||
-           !admin.resetPasswordExpiry ||
-           admin.resetPasswordExpiry < Date.now()
-        ){
-            return res.status(400).json({message:"Invalid or expired OTP"})
-        }
-        const hashedPassword=await bcrypt.hash(newPassword,10)
 
-        admin.password=hashedPassword;
-        admin.resetPasswordOtp=undefined;
-        admin.resetPasswordExpiry=undefined;
-        await admin.save();
-        return res.json({message:"Password updated successfully"})
-    }catch(err){
-        console.error("Reset Password Error:", err);
-        res.status(500).json({ message: "Internal Server Error", error: err.message });
+exports.resetPassword = async (req, res) => {
+  try {
+    const { otp, newPassword, confirmPassword } = req.body;
+
+    // Validate input
+    if (!otp || !newPassword || !confirmPassword) {
+      return res
+        .status(400)
+        .json({ message: "OTP, newPassword and confirmPassword are required" });
     }
-}
+
+    // Check password match
+    if (newPassword !== confirmPassword) {
+      return res
+        .status(400)
+        .json({ message: "New password and confirm password do not match" });
+    }
+
+    // Hash OTP
+    const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
+
+    // Find admin by OTP
+    const admin = await Admin.findOne({
+      resetPasswordOtp: hashedOtp,
+      resetPasswordExpiry: { $gt: Date.now() }, // not expired
+    });
+
+    if (!admin) {
+      return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update admin password and clear OTP fields
+    admin.password = hashedPassword;
+    admin.resetPasswordOtp = undefined;
+    admin.resetPasswordExpiry = undefined;
+
+    await admin.save();
+
+    return res.json({ message: "Password updated successfully" });
+  } catch (err) {
+    console.error("Reset Password Error:", err);
+    res
+      .status(500)
+      .json({ message: "Internal Server Error", error: err.message });
+  }
+};
+
 
 //Get Users List 
 

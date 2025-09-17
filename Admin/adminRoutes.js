@@ -1,12 +1,12 @@
 const express=require("express");
-const {loginAdmin,forgotPassword,updatePassword,debugAuthCheck,getUsers, updateAdminInfo, changePassword,sendNotification}=require('./adminController')
+const {loginAdmin,forgotPassword,resetPassword,debugAuthCheck,getUsers, updateAdminInfo, changePassword,sendNotification}=require('./adminController')
 const {createCategory,getCategories,updateCategory,deleteCategory}=require('./adminCategoryController')
 const {createBlog,getBlogs,updateBlogs,deleteBlogs}=require('./adminBlogsController')
 const { verifyAdmin } = require("./authMiddleware");
 const router=express.Router()
 router.post("/login",loginAdmin);
 router.post('/forgot-password',forgotPassword);
-router.post('/update-password',updatePassword);
+router.post('/reset-password',resetPassword);
 router.get('/users',verifyAdmin,getUsers);
 router.put('/update-info',verifyAdmin,updateAdminInfo)
 router.put('/change-password',verifyAdmin,changePassword)
