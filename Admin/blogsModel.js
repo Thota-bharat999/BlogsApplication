@@ -8,4 +8,4 @@ const blogSchema = new mongoose.Schema({
   categoryId: { type: String, required: true },
 }, { timestamps: true });
 
-module.exports = mongoose.model("Blogs", blogSchema);
+module.exports = mongoose.model("Blogs", blogSchema)

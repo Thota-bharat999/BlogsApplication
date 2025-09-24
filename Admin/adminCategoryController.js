@@ -94,11 +94,20 @@ res.status(500).json({message:"Server Error ",
   }
 }
 
+// ✅ Delete Category (supports both categoryId & _id)
 exports.deleteCategory = async (req, res) => {
   try {
-    const { id } = req.params; // e.g. cat_1811a2
+    const { id } = req.params; // could be cat_xxx or ObjectId
 
-    const deletedCategory = await BlogsCategory.findOneAndDelete({ categoryId: id }); // ✅ custom ID
+    let deletedCategory;
+
+    // If it looks like a Mongo ObjectId (24 hex chars), delete by _id
+    if (/^[0-9a-fA-F]{24}$/.test(id)) {
+      deletedCategory = await BlogsCategory.findByIdAndDelete(id);
+    } else {
+      // Otherwise delete by custom categoryId
+      deletedCategory = await BlogsCategory.findOneAndDelete({ categoryId: id });
+    }
 
     if (!deletedCategory) {
       return res.status(404).json({ message: "Category not found" });
@@ -107,13 +116,17 @@ exports.deleteCategory = async (req, res) => {
     res.json({
       message: "Category deleted successfully",
       category: {
-        id: deletedCategory.categoryId,
+        id: deletedCategory.categoryId || deletedCategory._id,
         name: deletedCategory.name,
         description: deletedCategory.description,
       },
     });
   } catch (err) {
     console.error("Delete Category Error:", err.message);
-    res.status(500).json({ message: "Internal Server Error", error: err.message });
+    res.status(500).json({
+      message: "Internal Server Error",
+      error: err.message,
+    });
   }
 };
+
