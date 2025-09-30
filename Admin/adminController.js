@@ -313,10 +313,12 @@ exports.changePassword = async (req, res) => {
 exports.sendNotification = async (req, res) => {
   try {
     const { to, subject, message } = req.body;
+    console.log("📩 Incoming notify request", req.body);
 
     if (!to || !subject || !message) {
       return res.status(400).json({ message: "to, subject, and message are required" });
     }
+    console.log("Sending email to:", to);
 
     // ✅ Configure transporter (use your real SMTP details or Gmail App Password)
     const transporter = nodemailer.createTransport({

@@ -2,9 +2,7 @@ const Blogs = require('./blogsModel');
 const { v4: uuidv4 } = require("uuid");
 const BlogsCategory = require('./categoryModel'); // still needed for validation when creating/updating blogs
 
-// =============================
 // Get Blogs (Paginated)
-// =============================
 exports.getBlogs = async (req, res) => {
   try {
     let { page = 1, limit = 10, sortBy = "createdAt" } = req.query;
