@@ -1,7 +1,7 @@
 const Admin=require('./authModel');
 const bcrypt = require("bcryptjs"); 
 const jwt=require('jsonwebtoken')
-const nodemailer=require("nodemailer")
+const sgMail = require("@sendgrid/mail");
 const crypto=require("crypto")
 
 // Debug endpoint to verify auth conditions without exposing secrets
@@ -84,46 +84,46 @@ exports.loginAdmin = async (req, res) => {
   }
 };
 
-
-exports.forgotPassword=async (req,res)=>{
-    try{
-        const{email}=req.body;
-        if(!email){
-            return res.status(400).json({message:"Email is requird"})
-        }
-        const admin=await Admin.findOne({email})
-        if(!admin){
-            return res.status(404).json({message:"Admin is Not Found"})
-        }
-        const otp=Math.floor(100000+Math.random()*900000).toString();
-        const otpExpiry=Date.now()+10*60*1000;
-        admin.resetPasswordOtp=crypto.createHash("sha256").update(otp).digest("hex");
-        admin.resetPasswordExpiry=otpExpiry;
-        await admin.save();
-
-        const  transporter=nodemailer.createTransport({
-            service:"gmail",
-            auth:{
-                user:process.env.SMTP_USER,
-                pass:process.env.SMTP_PASS,
-            },
-        });
-        // send email
-        await transporter.sendMail({
-            from: process.env.SMTP_USER,
-            to: email,
-            subject: "Admin Password Reset OTP",
-            text: `<p>Hello Admin,</p>
-             <p>Your OTP for password reset is: <b>${otp}</b></p>
-             <p>This OTP is valid for 10 minutes.</p>
-             <p>If you did not request this, please ignore.</p>`,
-        })
-        return res.json({ message: "OTP sent to registered email" });
-    }catch(err){
-      console.error("Forgot Password Error:", err);
-    res.status(500).json({ message: "Internal Server Error", error: err.message });
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
     }
-}
+
+    const admin = await Admin.findOne({ email });
+    if (!admin) {
+      return res.status(404).json({ message: "Admin not found" });
+    }
+
+    // Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = Date.now() + 10 * 60 * 1000; // 10 min
+    admin.resetPasswordOtp = crypto.createHash("sha256").update(otp).digest("hex");
+    admin.resetPasswordExpiry = otpExpiry;
+    await admin.save();
+
+    // Send email via SendGrid
+    const msg = {
+      to: email,
+      from: process.env.SUPPORT_EMAIL, // ✅ verified sender in SendGrid
+      subject: "Admin Password Reset OTP",
+      html: `
+        <p>Hello Admin,</p>
+        <p>Your OTP for password reset is: <b>${otp}</b></p>
+        <p>This OTP is valid for 10 minutes.</p>
+        <p>If you did not request this, please ignore.</p>
+      `,
+    };
+
+    await sgMail.send(msg);
+
+    return res.json({ message: "OTP sent to registered email" });
+  } catch (err) {
+    console.error("Forgot Password Error:", err);
+    res.status(500).json({ message: "Internal Server Error", error: err.message });
+  }
+};
 
 exports.resetPassword = async (req, res) => {
   try {
@@ -131,25 +131,22 @@ exports.resetPassword = async (req, res) => {
 
     // Validate input
     if (!otp || !newPassword || !confirmPassword) {
-      return res
-        .status(400)
-        .json({ message: "OTP, newPassword and confirmPassword are required" });
+      return res.status(400).json({
+        message: "OTP, newPassword, and confirmPassword are required",
+      });
     }
 
-    // Check password match
     if (newPassword !== confirmPassword) {
-      return res
-        .status(400)
-        .json({ message: "New password and confirm password do not match" });
+      return res.status(400).json({ message: "Passwords do not match" });
     }
 
-    // Hash OTP
+    // Hash the OTP to compare
     const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
 
-    // Find admin by OTP
+    // Find admin with matching OTP and not expired
     const admin = await Admin.findOne({
       resetPasswordOtp: hashedOtp,
-      resetPasswordExpiry: { $gt: Date.now() }, // not expired
+      resetPasswordExpiry: { $gt: Date.now() }, // OTP must still be valid
     });
 
     if (!admin) {
@@ -157,10 +154,10 @@ exports.resetPassword = async (req, res) => {
     }
 
     // Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const salt = await bcrypt.genSalt(10);
+    admin.password = await bcrypt.hash(newPassword.trim(), salt);
 
-    // Update admin password and clear OTP fields
-    admin.password = hashedPassword;
+    // Clear OTP fields
     admin.resetPasswordOtp = undefined;
     admin.resetPasswordExpiry = undefined;
 
@@ -169,11 +166,13 @@ exports.resetPassword = async (req, res) => {
     return res.json({ message: "Password updated successfully" });
   } catch (err) {
     console.error("Reset Password Error:", err);
-    res
-      .status(500)
-      .json({ message: "Internal Server Error", error: err.message });
+    res.status(500).json({
+      message: "Internal Server Error",
+      error: err.message,
+    });
   }
 };
+
 
 
 //Get Users List 
@@ -309,6 +308,8 @@ exports.changePassword = async (req, res) => {
 };
 
 // Notification 
+// Initialize SendGrid with API Key
+sgMail.setApiKey(process.env.BlogsApi);
 
 exports.sendNotification = async (req, res) => {
   try {
@@ -318,33 +319,20 @@ exports.sendNotification = async (req, res) => {
     if (!to || !subject || !message) {
       return res.status(400).json({ message: "to, subject, and message are required" });
     }
-    console.log("Sending email to:", to);
 
-    // ✅ Configure transporter (use your real SMTP details or Gmail App Password)
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: process.env.SMTP_PORT || 587,
-      secure: false, // true for port 465, false for other ports
-      auth: {
-        user: process.env.SMTP_USER, // e.g. your email
-        pass: process.env.SMTP_PASS, // app password or smtp pass
-      },
-    });
-
-    // ✅ Prepare mail options
-    const mailOptions = {
-      from: process.env.SMTP_FROM || `"Admin" <${process.env.SMTP_USER}>`,
+    const msg = {
       to,
+      from: process.env.SUPPORT_EMAIL, // must be a verified sender in SendGrid
       subject,
       text: message,
     };
 
-    // ✅ Send email
-    await transporter.sendMail(mailOptions);
+    // Send email via SendGrid
+    await sgMail.send(msg);
 
-    return res.status(200).json({ message: "Email sent successfully" });
+    return res.status(200).json({ message: "Email sent successfully via SendGrid 🚀" });
   } catch (err) {
-    console.error("❌ Email error:", err);
+    console.error("❌ SendGrid error:", err.response?.body || err.message);
     return res.status(500).json({ message: "Failed to send email", error: err.message });
   }
 };
